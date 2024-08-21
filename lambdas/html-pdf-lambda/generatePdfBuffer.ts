@@ -7,7 +7,6 @@ export const generatePdfBuffer = async (
   let result = undefined
   let browser = null
   try {
-    console.log('Launching browser')
     browser = await puppeteer.launch({
       args: chromium.args,
       defaultViewport: chromium.defaultViewport,
@@ -16,7 +15,6 @@ export const generatePdfBuffer = async (
       ignoreHTTPSErrors: true,
     })
     
-    console.log('Browser launched')
     const page = await browser.newPage()
 
     await page.setContent(html, {
@@ -27,7 +25,6 @@ export const generatePdfBuffer = async (
 
     result = await page.pdf({ format: 'a4', printBackground: true })
   } catch (e) {
-    console.log('Chromium error', { e })
   } finally {
     if (browser !== null) {
       await browser.close()

@@ -1,11 +1,8 @@
-import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3'
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
-import { Upload } from '@aws-sdk/lib-storage'
 import { APIGatewayProxyEvent, APIGatewayProxyHandler } from 'aws-lambda'
 import { generatePdfBuffer } from './generatePdfBuffer'
 
-// process.env.AWS_REGION is a default env var provided in lambdas by AWS
-const s3Client = new S3Client({ region: process.env.AWS_REGION })
+const { PDF_SECRETS } = process.env;
+const { pdf_api_key } = JSON.parse(PDF_SECRETS as string);
 
 export const handler: APIGatewayProxyHandler = async (event: APIGatewayProxyEvent) => {
     if (!event.body) {
@@ -15,7 +12,15 @@ export const handler: APIGatewayProxyHandler = async (event: APIGatewayProxyEven
         }
     }
     try {
-        const requestBody = JSON.parse(event.body) as { html: string, s3Key: string }
+        const apiKey = event.headers['x-api-key']
+        if (apiKey !== pdf_api_key) {
+            return {
+                statusCode: 403,
+                body: "Unauthorized"
+            }
+        }
+    
+        const requestBody = JSON.parse(event.body) as { html: string }
 
         const pdfBuffer = await generatePdfBuffer(requestBody.html)
 
@@ -23,29 +28,10 @@ export const handler: APIGatewayProxyHandler = async (event: APIGatewayProxyEven
             throw new Error('Failed to created PDF buffer from HTML')
         }
 
-        const s3Upload = new Upload({
-            client: s3Client,
-            params: {
-                Bucket: process.env.S3_PDF_BUCKET,
-                Body: pdfBuffer,
-                Key: requestBody.s3Key
-            }
-        })
-        s3Upload.on("httpUploadProgress", (progress) => {
-            console.log(progress);
-        });
-        await s3Upload.done()
-
-        const presignedUrl = await getSignedUrl(
-            s3Client,
-            new GetObjectCommand({ Bucket: process.env.S3_PDF_BUCKET, Key: requestBody.s3Key }),
-            { expiresIn: 3600 }
-        )
-
         return {
             statusCode: 200,
             body: JSON.stringify({
-                pdfUrl: presignedUrl
+                base64: pdfBuffer.toString('base64')
             })
         }
     } catch (error) {
